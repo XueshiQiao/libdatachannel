@@ -101,9 +101,8 @@ void SctpTransport::Cleanup() {
 		std::this_thread::sleep_for(100ms);
 }
 
-SctpTransport::SctpTransport(shared_ptr<Transport> lower, uint16_t port,
-                             optional<size_t> mtu, message_callback recvCallback,
-                             amount_callback bufferedAmountCallback,
+SctpTransport::SctpTransport(shared_ptr<Transport> lower, uint16_t port, optional<size_t> mtu,
+                             message_callback recvCallback, amount_callback bufferedAmountCallback,
                              state_callback stateChangeCallback)
     : Transport(lower, std::move(stateChangeCallback)), mPort(port),
       mSendQueue(0, message_size_func), mBufferedAmountCallback(std::move(bufferedAmountCallback)) {
@@ -143,6 +142,9 @@ SctpTransport::SctpTransport(shared_ptr<Transport> lower, uint16_t port,
 	int on = 1;
 	if (usrsctp_setsockopt(mSock, IPPROTO_SCTP, SCTP_RECVRCVINFO, &on, sizeof(on)))
 		throw std::runtime_error("Could set socket option SCTP_RECVRCVINFO, errno=" +
+		                         std::to_string(errno));
+	if (usrsctp_setsockopt(mSock, IPPROTO_SCTP, SCTP_EXPLICIT_EOR, &on, sizeof(on)))
+		throw std::runtime_error("Could set socket option SCTP_EXPLICIT_EOR, errno=" +
 		                         std::to_string(errno));
 
 	struct sctp_event se = {};
@@ -495,7 +497,7 @@ bool SctpTransport::trySendMessage(message_ptr message) {
 	spa.sendv_flags |= SCTP_SEND_SNDINFO_VALID;
 	spa.sendv_sndinfo.snd_sid = uint16_t(message->stream);
 	spa.sendv_sndinfo.snd_ppid = htonl(ppid);
-	spa.sendv_sndinfo.snd_flags |= SCTP_EOR; // implicit here
+	spa.sendv_sndinfo.snd_flags |= SCTP_EOR;
 
 	// set prinfo
 	spa.sendv_flags |= SCTP_SEND_PRINFO_VALID;
