@@ -35,7 +35,7 @@ using chrono::steady_clock;
 template <class T> weak_ptr<T> make_weak_ptr(shared_ptr<T> ptr) { return ptr; }
 
 size_t benchmark(milliseconds duration) {
-	rtc::InitLogger(LogLevel::Warning);
+	rtc::InitLogger(LogLevel::Verbose);
 	rtc::Preload();
 
 	Configuration config1;
@@ -93,8 +93,12 @@ size_t benchmark(milliseconds duration) {
 		dc->onMessage([&receivedTime, &receivedSize](variant<binary, string> message) {
 			if (holds_alternative<binary>(message)) {
 				const auto &bin = get<binary>(message);
+				if(bin.size() != messageSize)
+					std::cerr << "Incorrect message size: " << bin.size() << std::endl;
+
 				if (receivedSize == 0)
 					receivedTime = steady_clock::now();
+
 				receivedSize += bin.size();
 			}
 		});
@@ -120,7 +124,7 @@ size_t benchmark(milliseconds duration) {
 				dc1->send(messageData);
 			}
 		} catch (const std::exception &e) {
-			std::cout << "Send failed: " << e.what() << std::endl;
+			std::cerr << "Send failed: " << e.what() << std::endl;
 		}
 
 		// When sent data is buffered in the DataChannel,
@@ -138,7 +142,7 @@ size_t benchmark(milliseconds duration) {
 				dc1->send(messageData);
 			}
 		} catch (const std::exception &e) {
-			std::cout << "Send failed: " << e.what() << std::endl;
+			std::cerr << "Send failed: " << e.what() << std::endl;
 		}
 	});
 

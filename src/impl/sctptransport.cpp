@@ -139,7 +139,7 @@ SctpTransport::SctpTransport(shared_ptr<Transport> lower, uint16_t port, optiona
 	if (usrsctp_setsockopt(mSock, IPPROTO_SCTP, SCTP_ENABLE_STREAM_RESET, &av, sizeof(av)))
 		throw std::runtime_error("Could not set socket option SCTP_ENABLE_STREAM_RESET, errno=" +
 		                         std::to_string(errno));
-	int on = 1;
+	const int on = 1;
 	if (usrsctp_setsockopt(mSock, IPPROTO_SCTP, SCTP_RECVRCVINFO, &on, sizeof(on)))
 		throw std::runtime_error("Could set socket option SCTP_RECVRCVINFO, errno=" +
 		                         std::to_string(errno));
@@ -205,6 +205,11 @@ SctpTransport::SctpTransport(shared_ptr<Transport> lower, uint16_t port, optiona
 		throw std::runtime_error("Could not set socket option SCTP_PEER_ADDR_PARAMS, errno=" +
 		                         std::to_string(errno));
 
+	const int pdp = 65536;
+	if (usrsctp_setsockopt(mSock, IPPROTO_SCTP, SCTP_PARTIAL_DELIVERY_POINT, &pdp, sizeof(pdp)))
+		throw std::runtime_error("Could not set socket option SCTP_PARTIAL_DELIVERY_POINT, errno=" +
+		                         std::to_string(errno));
+
 	// The IETF draft recommends the number of streams negotiated during SCTP association to be
 	// 65535.
 	// See https://tools.ietf.org/html/draft-ietf-rtcweb-data-channel-13#section-6.2
@@ -213,14 +218,6 @@ SctpTransport::SctpTransport(shared_ptr<Transport> lower, uint16_t port, optiona
 	sinit.sinit_max_instreams = 65535;
 	if (usrsctp_setsockopt(mSock, IPPROTO_SCTP, SCTP_INITMSG, &sinit, sizeof(sinit)))
 		throw std::runtime_error("Could not set socket option SCTP_INITMSG, errno=" +
-		                         std::to_string(errno));
-
-	// Prevent fragmented interleave of messages (i.e. level 0), see RFC 6458 8.1.20.
-	// Unless the user has set the fragmentation interleave level to 0, notifications
-	// may also be interleaved with partially delivered messages.
-	int level = 0;
-	if (usrsctp_setsockopt(mSock, IPPROTO_SCTP, SCTP_FRAGMENT_INTERLEAVE, &level, sizeof(level)))
-		throw std::runtime_error("Could not disable SCTP fragmented interleave, errno=" +
 		                         std::to_string(errno));
 
 	// The default send and receive window size of usrsctp is 256KiB, which is too small for
@@ -405,10 +402,8 @@ void SctpTransport::doRecv() {
 					throw std::runtime_error("SCTP recv failed, errno=" + std::to_string(errno));
 			}
 
-			PLOG_VERBOSE << "SCTP recv, len=" << len;
+			PLOG_VERBOSE << "SCTP recv, len=" << len << ", EOR=" << ((flags & MSG_EOR) != 0);
 
-			// SCTP_FRAGMENT_INTERLEAVE does not seem to work as expected for messages > 64KB,
-			// therefore partial notifications and messages need to be handled separately.
 			if (flags & MSG_NOTIFICATION) {
 				// SCTP event notification
 				mPartialNotification.insert(mPartialNotification.end(), buffer, buffer + len);
@@ -484,64 +479,86 @@ bool SctpTransport::trySendMessage(message_ptr message) {
 		return true;
 	}
 
-	PLOG_VERBOSE << "SCTP try send size=" << message->size();
-
-	// TODO: Implement SCTP ndata specification draft when supported everywhere
-	// See https://tools.ietf.org/html/draft-ietf-tsvwg-sctp-ndata-08
-
 	const Reliability reliability = message->reliability ? *message->reliability : Reliability();
 
-	struct sctp_sendv_spa spa = {};
-
-	// set sndinfo
-	spa.sendv_flags |= SCTP_SEND_SNDINFO_VALID;
-	spa.sendv_sndinfo.snd_sid = uint16_t(message->stream);
-	spa.sendv_sndinfo.snd_ppid = htonl(ppid);
-	spa.sendv_sndinfo.snd_flags |= SCTP_EOR;
-
-	// set prinfo
-	spa.sendv_flags |= SCTP_SEND_PRINFO_VALID;
-	if (reliability.unordered)
-		spa.sendv_sndinfo.snd_flags |= SCTP_UNORDERED;
-
-	switch (reliability.type) {
-	case Reliability::Type::Rexmit:
-		spa.sendv_flags |= SCTP_SEND_PRINFO_VALID;
-		spa.sendv_prinfo.pr_policy = SCTP_PR_SCTP_RTX;
-		spa.sendv_prinfo.pr_value = uint32_t(std::get<int>(reliability.rexmit));
-		break;
-	case Reliability::Type::Timed:
-		spa.sendv_flags |= SCTP_SEND_PRINFO_VALID;
-		spa.sendv_prinfo.pr_policy = SCTP_PR_SCTP_TTL;
-		spa.sendv_prinfo.pr_value = uint32_t(std::get<milliseconds>(reliability.rexmit).count());
-		break;
-	default:
-		spa.sendv_prinfo.pr_policy = SCTP_PR_SCTP_NONE;
-		break;
-	}
-
-	ssize_t ret;
-	if (!message->empty()) {
-		ret = usrsctp_sendv(mSock, message->data(), message->size(), nullptr, 0, &spa, sizeof(spa),
-		                    SCTP_SENDV_SPA, 0);
-	} else {
-		const char zero = 0;
-		ret = usrsctp_sendv(mSock, &zero, 1, nullptr, 0, &spa, sizeof(spa), SCTP_SENDV_SPA, 0);
-	}
-
-	if (ret < 0) {
-		if (errno == EWOULDBLOCK || errno == EAGAIN) {
-			PLOG_VERBOSE << "SCTP sending not possible";
-			return false;
+	do {
+		if (!message->empty() && mSendPosition >= message->size()) {
+			PLOG_ERROR << "Send position " << mSendPosition << " is past message size "
+			           << message->size();
+			break;
 		}
 
-		PLOG_ERROR << "SCTP sending failed, errno=" << errno;
-		throw std::runtime_error("Sending failed, errno=" + std::to_string(errno));
-	}
+		const byte zero{0};
+		const byte *data;
+		size_t size;
+		if (!message->empty()) {
+			data = message->data() + mSendPosition;
+			size = std::min(message->size() - mSendPosition, size_t(65536));
+		} else {
+			data = &zero;
+			size = 1;
+		}
 
-	PLOG_VERBOSE << "SCTP sent size=" << message->size();
-	if (message->type == Message::Type::Binary || message->type == Message::Type::String)
-		mBytesSent += message->size();
+		PLOG_VERBOSE << "SCTP try send size=" << size << ", position=" << mSendPosition
+		             << ", total=" << message->size()
+		             << ", EOR=" << (mSendPosition + size == message->size());
+
+		// TODO: Implement SCTP ndata specification draft when supported everywhere
+		// See https://tools.ietf.org/html/draft-ietf-tsvwg-sctp-ndata-08
+
+		struct sctp_sendv_spa spa = {};
+
+		// set sndinfo
+		spa.sendv_flags |= SCTP_SEND_SNDINFO_VALID;
+		spa.sendv_sndinfo.snd_sid = uint16_t(message->stream);
+		spa.sendv_sndinfo.snd_ppid = htonl(ppid);
+
+		if (mSendPosition + size == message->size())
+			spa.sendv_sndinfo.snd_flags |= SCTP_EOR;
+
+		// set prinfo
+		spa.sendv_flags |= SCTP_SEND_PRINFO_VALID;
+		if (reliability.unordered)
+			spa.sendv_sndinfo.snd_flags |= SCTP_UNORDERED;
+
+		switch (reliability.type) {
+		case Reliability::Type::Rexmit:
+			spa.sendv_flags |= SCTP_SEND_PRINFO_VALID;
+			spa.sendv_prinfo.pr_policy = SCTP_PR_SCTP_RTX;
+			spa.sendv_prinfo.pr_value = uint32_t(std::get<int>(reliability.rexmit));
+			break;
+		case Reliability::Type::Timed:
+			spa.sendv_flags |= SCTP_SEND_PRINFO_VALID;
+			spa.sendv_prinfo.pr_policy = SCTP_PR_SCTP_TTL;
+			spa.sendv_prinfo.pr_value =
+			    uint32_t(std::get<milliseconds>(reliability.rexmit).count());
+			break;
+		default:
+			spa.sendv_prinfo.pr_policy = SCTP_PR_SCTP_NONE;
+			break;
+		}
+
+		ssize_t ret =
+		    usrsctp_sendv(mSock, data, size, nullptr, 0, &spa, sizeof(spa), SCTP_SENDV_SPA, 0);
+
+		if (ret < 0) {
+			if (errno == EWOULDBLOCK || errno == EAGAIN) {
+				PLOG_VERBOSE << "SCTP sending not possible";
+				return false;
+			}
+
+			PLOG_ERROR << "SCTP sending failed, errno=" << errno;
+			throw std::runtime_error("Sending failed, errno=" + std::to_string(errno));
+		}
+
+		PLOG_VERBOSE << "SCTP sent size=" << size;
+		mSendPosition += size;
+		if (message->type == Message::Type::Binary || message->type == Message::Type::String)
+			mBytesSent += size;
+
+	} while (mSendPosition < message->size());
+
+	mSendPosition = 0;
 	return true;
 }
 
