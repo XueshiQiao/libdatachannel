@@ -126,6 +126,7 @@ int main(int argc, char **argv) try {
 			auto mid = message["mid"].get<string>();
 			pc->addRemoteCandidate(Candidate(sdp, mid));
 		}
+
 	});
 
 	string wsPrefix = "";
@@ -167,8 +168,14 @@ int main(int argc, char **argv) try {
 		dc->onClosed([id]() { cout << "DataChannel from " << id << " closed" << endl; });
 
 		dc->onMessage([id, wdc = make_weak_ptr(dc)](variant<binary, string> data) {
-			if (holds_alternative<string>(data))
+			if (holds_alternative<string>(data)) {
 				cout << "Message from " << id << " received: " << get<string>(data) << endl;
+			    string content = get<string>(data);
+				if (content == "dc") {
+					auto dc = wdc.lock();
+					dc->send("hello world");
+				}
+			}
 			else
 				cout << "Binary message from " << id
 				     << " received, size=" << get<binary>(data).size() << endl;
