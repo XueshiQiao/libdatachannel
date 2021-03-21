@@ -35,6 +35,7 @@
 #include <stdexcept>
 #include <thread>
 #include <unordered_map>
+#include "filereader.h"
 
 using namespace rtc;
 using namespace std;
@@ -56,6 +57,11 @@ string randomId(size_t length);
 int main(int argc, char **argv) try {
 	Cmdline params(argc, argv);
 
+	std::vector<char> content = readFile("/Volumes/SSD/Code/libdatachannel/examples/client/filereader.h");
+    saveFile("/Volumes/SSD/Code/libdatachannel/examples/client/a.log", content);
+    std::vector<char> content2 = readFile("/Volumes/SSD/Code/libdatachannel/examples/client/a.log");
+
+	assert(content.size() == content2.size());
 	rtc::InitLogger(LogLevel::Info);
 
 	Configuration config;
@@ -71,6 +77,9 @@ int main(int argc, char **argv) try {
 		cout << "Stun server is " << stunServer << endl;
 		config.iceServers.emplace_back(stunServer);
 	}
+
+	//joey
+	config.iceServers.emplace_back(rtc::IceServer("stun:47.95.213.21:3478"));
 
 	localId = randomId(4);
 	cout << "The local ID is: " << localId << endl;
@@ -233,6 +242,7 @@ shared_ptr<PeerConnection> createPeerConnection(const Configuration &config,
 		});
 
 		dc->send("Hello from " + localId);
+//		dc->send()
 
 		dataChannelMap.emplace(id, dc);
 	});
