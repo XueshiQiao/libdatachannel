@@ -13,21 +13,22 @@
 namespace sample {
 class Client {
 public:
-    Client(std::string& id, std::unique_ptr<Configuration> configuration): id(id), configuration(std::move(configuration));
+    Client(std::string& id, std::string& wsURL, std::unique_ptr<rtc::Configuration> configuration);
     void sendFile(std::string& filePath) {}
     void onReceiveFile() {}
 
 protected:
-	void createWebSocket();
+	void createWebSocket(std::function<void(void)> callback);
 	void createPeerConnection();
 private:
 
     std::string id;
-    std::unique_ptr<Configuration> configuration;
-	std::shared_ptr<WebSocket> ws;
+	std::string wsURL;
+    std::unique_ptr<rtc::Configuration> configuration;
+	std::shared_ptr<rtc::WebSocket> ws;
 //    std::shared_ptr<rtc::PeerConnection> pc;
-    std::map<std::string, std::shared_ptr<rtc::PeerConnection> pcMap;
-    std::map<std::string, std::shared_ptr<rtc::DataChannel> dcMap;
+    std::map<std::string, std::shared_ptr<rtc::PeerConnection>> pcMap;
+    std::map<std::string, std::shared_ptr<rtc::DataChannel>> dcMap;
 };
 }
 

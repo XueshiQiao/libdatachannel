@@ -8,12 +8,24 @@ if(WIN32)
 	target_compile_definitions(datachannel-client PUBLIC STATIC_GETOPT)
 else()
 	add_executable(datachannel-client main.cpp parse_cl.cpp parse_cl.h)
+    add_executable(datachannel-client-receiver receiver.cpp client.h client.cpp parse_cl.h parse_cl.cpp )
+	add_executable(datachannel-client-sender sender.cpp client.h client.cpp parse_cl.h parse_cl.cpp )
 endif()
 
 set_target_properties(datachannel-client PROPERTIES
 	CXX_STANDARD 17
 	OUTPUT_NAME client)
 target_link_libraries(datachannel-client datachannel nlohmann_json)
+
+set_target_properties(datachannel-client-receiver PROPERTIES
+		CXX_STANDARD 17
+		OUTPUT_NAME client-receiver)
+target_link_libraries(datachannel-client-receiver datachannel nlohmann_json)
+
+set_target_properties(datachannel-client-sender PROPERTIES
+		CXX_STANDARD 17
+		OUTPUT_NAME client-sender)
+target_link_libraries(datachannel-client-sender datachannel nlohmann_json)
 
 if(WIN32)
 	add_custom_command(TARGET datachannel-client POST_BUILD

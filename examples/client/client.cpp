@@ -3,18 +3,23 @@
 //
 
 #include "client.h"
-#include "peerconnection.hpp"
+#include "rtc/rtc.hpp"
+#include <functional>
+
+using namespace rtc;
+using namespace std;
+using json = nlohmann::json;
 
 namespace sample {
 
-Client::Client(std::string &id, std::unique_ptr<Configuration> configuration) {
-    createWebSocket([](){
-        createPeerConnection();
+Client::Client(std::string &id, std::string& wsURL, std::unique_ptr<rtc::Configuration> configuration): id(id), wsURL(wsURL), configuration(std::move(configuration)) {
+    createWebSocket([=]() {
+		createPeerConnection();
 	});
 }
 
-void Client::createWebSocket(std::function<void> callback) {
-    ws = std::make_shared<WebSocket>(configuration);
+void Client::createWebSocket(std::function<void(void)> callback) {
+    ws = std::make_shared<rtc::WebSocket>();//std::make_optional(configuration.get())
     std::promise<void> promise;
     auto future = promise.get_future();
 
@@ -23,7 +28,7 @@ void Client::createWebSocket(std::function<void> callback) {
       promise.set_value();
     });
 
-    ws->onError([&promise](string s) {
+    ws->onError([&promise](std::string s) {
       std::cout << "ws encounter an error:" << s  << std::endl;
       promise.set_exception(std::make_exception_ptr(std::runtime_error(s)));
     });
@@ -48,24 +53,24 @@ void Client::createWebSocket(std::function<void> callback) {
         //do sth
       }
     });
-	configuration
-	ws->open(configuration->webSocketServer);
+	ws->open(wsURL);
 
 	future.get();
 	callback();
 }
 
+void Client::createPeerConnection() {
+    auto pc = std::make_shared<rtc::PeerConnection>(*configuration.get());
+    pc->onStateChange([](rtc::PeerConnection::State state) {
+      std::cout << "State: " << state << std::endl;
+    });
+    pc->onGatheringStateChange([](rtc::PeerConnection::GatheringState state) {
+      std::cout << "Gathering State: " << state << std::endl;
+    });
 }
 
-void Client::createPeerConnection() {
-    auto pc = std::make_shared<rtc::PeerConnection>(configuration.get());
-	pc->onStateChange([](PeerConnection::State state) {
-		std::cout << "State: " << state << std::endl;
-	});
-	pc->onGatheringStateChange([](PeerConnection:GatheringState state) {
-		std::cout << "Gathering State: " << state << std::endl;
-	});
 }
+
 
 
 //int main(int argc, char** argv) {

@@ -126,7 +126,6 @@ int main(int argc, char **argv) try {
 			auto mid = message["mid"].get<string>();
 			pc->addRemoteCandidate(Candidate(sdp, mid));
 		}
-
 	});
 
 	string wsPrefix = "";
