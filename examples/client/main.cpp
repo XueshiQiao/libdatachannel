@@ -65,18 +65,18 @@ int main(int argc, char **argv) try {
 	rtc::InitLogger(LogLevel::Info);
 
 	Configuration config;
-	string stunServer = "";
-	if (params.noStun()) {
-		cout << "No STUN server is configured. Only local hosts and public IP addresses supported."
-		     << endl;
-	} else {
-		if (params.stunServer().substr(0, 5).compare("stun:") != 0) {
-			stunServer = "stun:";
-		}
-		stunServer += params.stunServer() + ":" + to_string(params.stunPort());
-		cout << "Stun server is " << stunServer << endl;
-		config.iceServers.emplace_back(stunServer);
-	}
+//	string stunServer = "";
+//	if (params.noStun()) {
+//		cout << "No STUN server is configured. Only local hosts and public IP addresses supported."
+//		     << endl;
+//	} else {
+//		if (params.stunServer().substr(0, 5).compare("stun:") != 0) {
+//			stunServer = "stun:";
+//		}
+//		stunServer += params.stunServer() + ":" + to_string(params.stunPort());
+//		cout << "Stun server is " << stunServer << endl;
+//		config.iceServers.emplace_back(stunServer);
+//	}
 
 	//joey
 	config.iceServers.emplace_back(rtc::IceServer("stun:47.95.213.21:3478"));
@@ -243,6 +243,13 @@ shared_ptr<PeerConnection> createPeerConnection(const Configuration &config,
 
 		dc->send("Hello from " + localId);
 //		dc->send()
+		std::cout << "start send file " << std::endl;
+        std::vector<char> fileContent = readFile("/Volumes/SSD/Code/libdatachannel/examples/client/filereader.h");
+		std::vector<byte> bytes(fileContent.size());
+		for (size_t idx = 0; idx < fileContent.size(); idx++) {
+			bytes[idx] = static_cast<std::byte>(fileContent[idx]);
+		}
+		dc->send(bytes.data(), fileContent.size());
 
 		dataChannelMap.emplace(id, dc);
 	});
