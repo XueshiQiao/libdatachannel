@@ -57,6 +57,12 @@ string randomId(size_t length);
 int main(int argc, char **argv) try {
 	Cmdline params(argc, argv);
 
+	std::string src = "/Volumes/SSD/Code/libdatachannel/examples/client/filereader.h";
+	std::string dest = "/Volumes/SSD/Code/libdatachannel/examples/client/file";
+	readFile(src, [&](const std::vector<char>& buffer) {
+		appendFile(dest, buffer);
+	});
+
 	std::vector<char> content = readFile("/Volumes/SSD/Code/libdatachannel/examples/client/filereader.h");
     saveFile("/Volumes/SSD/Code/libdatachannel/examples/client/a.log", content);
     std::vector<char> content2 = readFile("/Volumes/SSD/Code/libdatachannel/examples/client/a.log");
