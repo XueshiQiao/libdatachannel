@@ -13,15 +13,20 @@
 namespace sample {
 class Client {
 public:
-    Client(std::string& id, std::string& wsURL, std::unique_ptr<rtc::Configuration> configuration);
+	enum ClientRole {
+		ClientRoleSender = 0,
+		ClientRoleReceiver = 1
+	};
+    Client(std::string& id, std::string& wsURL, std::unique_ptr<rtc::Configuration> configuration, ClientRole role = ClientRoleReceiver);
     void sendFile(std::string& filePath) {}
     void onReceiveFile() {}
 
 protected:
-	void createWebSocket(std::function<void(void)> callback);
-	void createPeerConnection();
+	void createWebSocket(const std::function<void(void)> callback);
+    std::shared_ptr<rtc::PeerConnection> createPeerConnection(const std::string& remoteId, std::weak_ptr<rtc::WebSocket> ws);
 private:
 
+	ClientRole myRole{ClientRoleReceiver};
     std::string id;
 	std::string wsURL;
     std::unique_ptr<rtc::Configuration> configuration;
