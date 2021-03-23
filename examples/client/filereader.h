@@ -18,10 +18,8 @@ private:
 
 static void readFile(const std::string& filePath, std::function<void(const std::vector<char>&)> callback){
     std::ifstream file(filePath, std::ios::binary | std::ios::ate);
-
-	size_t totalSize = file.tellg();
-	size_t totalRead = 0;
-	size_t size = 50;
+	size_t size = 500;
+	size_t total = 0;
 	std::vector<char> buffer(size);
 	if (!file.is_open()) {
 		return ;
@@ -29,18 +27,20 @@ static void readFile(const std::string& filePath, std::function<void(const std::
 	file.seekg(0, std::ios::beg);
 	while (true) {
 		file.read(buffer.data(), size);
-		std::cout << "just read: " << file.gcount() << std::endl;
+		total += file.gcount();
+//		std::cout << "just read: " << file.gcount() << std::endl;
 		if (file.eof()) {
             callback(std::vector<char>(buffer.begin(), buffer.begin() + file.gcount()));
 			break;
 		} else {
 			callback(buffer);
 		}
-        totalRead += size;
 	}
 	file.close();
+    std::cout << "total read: " << total << std::endl;
 };
 
+///T maybe char or std::byte
 static void appendFile(const std::string& filePath, const std::vector<char>& buffer) {
 	std::ofstream file(filePath, std::ios::binary | std::ios::out | std::ios::app);
 	file.write(buffer.data(), buffer.size());

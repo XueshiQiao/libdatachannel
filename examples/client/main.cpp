@@ -57,17 +57,17 @@ string randomId(size_t length);
 int main(int argc, char **argv) try {
 	Cmdline params(argc, argv);
 
-	std::string src = "/Volumes/SSD/Code/libdatachannel/examples/client/filereader.h";
-	std::string dest = "/Volumes/SSD/Code/libdatachannel/examples/client/file";
-	readFile(src, [&](const std::vector<char>& buffer) {
-		appendFile(dest, buffer);
-	});
-
-	std::vector<char> content = readFile("/Volumes/SSD/Code/libdatachannel/examples/client/filereader.h");
-    saveFile("/Volumes/SSD/Code/libdatachannel/examples/client/a.log", content);
-    std::vector<char> content2 = readFile("/Volumes/SSD/Code/libdatachannel/examples/client/a.log");
-
-	assert(content.size() == content2.size());
+//	std::string src = "/Users/joey/Code/libdatachannel/examples/client/filereader.h";
+//	std::string dest = "/Users/joey/Code/libdatachannel/examples/client/file";
+//	readFile(src, [&](const std::vector<char>& buffer) {
+//		appendFile(dest, buffer);
+//	});
+//
+//	std::vector<char> content = readFile("/Volumes/SSD/Code/libdatachannel/examples/client/filereader.h");
+//    saveFile("/Volumes/SSD/Code/libdatachannel/examples/client/a.log", content);
+//    std::vector<char> content2 = readFile("/Volumes/SSD/Code/libdatachannel/examples/client/a.log");
+//
+//	assert(content.size() == content2.size());
 	rtc::InitLogger(LogLevel::Info);
 
 	Configuration config;
@@ -184,11 +184,18 @@ int main(int argc, char **argv) try {
 		dc->onMessage([id, wdc = make_weak_ptr(dc)](variant<binary, string> data) {
 			if (holds_alternative<string>(data))
 				cout << "Message from " << id << " received: " << get<string>(data) << endl;
-			else
-				cout << "Binary message from " << id
-				     << " received, size=" << get<binary>(data).size() << endl;
+			else {
+                cout << "1Binary message from " << id
+                     << " received, size=" << get<binary>(data).size() << endl;
+                std::string dest = "/Users/joey/Downloads/file.zip";
+                std::vector<std::byte> bytes = get<binary>(data);
+				std::vector<char> chars(bytes.size());
+				std::transform(bytes.begin(), bytes.end(), chars.begin(), [](const std::byte byte){
+					return static_cast<char>(byte);
+				});
+				appendFile(dest, chars);
+            }
 		});
-
 		dataChannelMap.emplace(id, dc);
 	}
 
@@ -243,19 +250,22 @@ shared_ptr<PeerConnection> createPeerConnection(const Configuration &config,
 			if (holds_alternative<string>(data))
 				cout << "Message from " << id << " received: " << get<string>(data) << endl;
 			else
-				cout << "Binary message from " << id
+				cout << "2Binary message from " << id
 				     << " received, size=" << get<binary>(data).size() << endl;
 		});
 
 		dc->send("Hello from " + localId);
 //		dc->send()
 		std::cout << "start send file " << std::endl;
-        std::vector<char> fileContent = readFile("/Volumes/SSD/Code/libdatachannel/examples/client/filereader.h");
-		std::vector<byte> bytes(fileContent.size());
-		for (size_t idx = 0; idx < fileContent.size(); idx++) {
-			bytes[idx] = static_cast<std::byte>(fileContent[idx]);
-		}
-		dc->send(bytes.data(), fileContent.size());
+		std::string file{"/Users/joey/Downloads/OpenVPNEnablerForBigSur.zip"};
+//        std::vector<char> fileContent = readFile();
+		readFile(file, [&](const std::vector<char>& chars) {
+          std::vector<std::byte> bytes(chars.size());
+		  std::transform(chars.begin(), chars.end(), bytes.begin(), [&](const char& c) {
+			  return static_cast<std::byte>(c);
+		  });
+		  dc->send(bytes.data(), bytes.size());
+		});
 
 		dataChannelMap.emplace(id, dc);
 	});
