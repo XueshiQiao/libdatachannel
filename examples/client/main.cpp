@@ -43,6 +43,8 @@ using namespace std::chrono_literals;
 
 using json = nlohmann::json;
 
+#include "Client.h"
+
 template <class T> weak_ptr<T> make_weak_ptr(shared_ptr<T> ptr) { return ptr; }
 
 unordered_map<string, shared_ptr<PeerConnection>> peerConnectionMap;
@@ -53,17 +55,6 @@ string localId;
 shared_ptr<PeerConnection> createPeerConnection(const Configuration &config,
                                                 weak_ptr<WebSocket> wws, string id);
 string randomId(size_t length);
-
-void handleFile(std::weak_ptr<rtc::DataChannel> dc, const std::vector<std::byte>& bytes) {
-    if (dc.lock()) {
-        std::string dest = "/Users/joey/Downloads/file.zip";
-        std::vector<char> chars(bytes.size());
-        std::transform(bytes.begin(), bytes.end(), chars.begin(), [](const std::byte byte){
-          return static_cast<char>(byte);
-        });
-        appendFile(dest, chars);
-	}
-}
 
 int main(int argc, char **argv) try {
 	Cmdline params(argc, argv);
@@ -82,18 +73,6 @@ int main(int argc, char **argv) try {
 	rtc::InitLogger(LogLevel::Info);
 
 	Configuration config;
-//	string stunServer = "";
-//	if (params.noStun()) {
-//		cout << "No STUN server is configured. Only local hosts and public IP addresses supported."
-//		     << endl;
-//	} else {
-//		if (params.stunServer().substr(0, 5).compare("stun:") != 0) {
-//			stunServer = "stun:";
-//		}
-//		stunServer += params.stunServer() + ":" + to_string(params.stunPort());
-//		cout << "Stun server is " << stunServer << endl;
-//		config.iceServers.emplace_back(stunServer);
-//	}
 
 	//joey
 	config.iceServers.emplace_back(rtc::IceServer("stun:47.95.213.21:3478"));
@@ -101,186 +80,23 @@ int main(int argc, char **argv) try {
 	localId = randomId(4);
 	cout << "The local ID is: " << localId << endl;
 
-	auto ws = make_shared<WebSocket>();
-
-	std::promise<void> wsPromise;
-	auto wsFuture = wsPromise.get_future();
-
-	ws->onOpen([&wsPromise]() {
-		cout << "WebSocket connected, signaling ready" << endl;
-		wsPromise.set_value();
+	std::string websocketURL = "ws://127.0.0.1:8000/" + localId;
+	auto client = std::make_shared<Client>(localId, websocketURL, std::make_shared<rtc::Configuration>(config));
+	std::thread t([&]() {
+        client->openConnect();
 	});
 
-	ws->onError([&wsPromise](string s) {
-		cout << "WebSocket error" << endl;
-		wsPromise.set_exception(std::make_exception_ptr(std::runtime_error(s)));
-	});
+	t.join();
 
-	ws->onClosed([]() { cout << "WebSocket closed" << endl; });
-
-	ws->onMessage([&](variant<binary, string> data) {
-		if (!holds_alternative<string>(data))
-			return;
-
-		json message = json::parse(get<string>(data));
-
-		auto it = message.find("id");
-		if (it == message.end())
-			return;
-		string id = it->get<string>();
-
-		it = message.find("type");
-		if (it == message.end())
-			return;
-		string type = it->get<string>();
-
-		shared_ptr<PeerConnection> pc;
-		if (auto jt = peerConnectionMap.find(id); jt != peerConnectionMap.end()) {
-			pc = jt->second;
-		} else if (type == "offer") {
-			cout << "Answering to " + id << endl;
-			pc = createPeerConnection(config, ws, id);
-		} else {
-			return;
-		}
-
-		if (type == "offer" || type == "answer") {
-			auto sdp = message["description"].get<string>();
-			pc->setRemoteDescription(Description(sdp, type));
-		} else if (type == "candidate") {
-			auto sdp = message["candidate"].get<string>();
-			auto mid = message["mid"].get<string>();
-			pc->addRemoteCandidate(Candidate(sdp, mid));
-		}
-	});
-
-	string wsPrefix = "";
-	if (params.webSocketServer().substr(0, 5).compare("ws://") != 0) {
-		wsPrefix = "ws://";
+	while(true){
+		pthread_yield_np();
 	}
-	const string url = wsPrefix + params.webSocketServer() + ":" +
-	                   to_string(params.webSocketPort()) + "/" + localId;
-	cout << "Url is " << url << endl;
-	ws->open(url);
-
-	cout << "Waiting for signaling to be connected..." << endl;
-	wsFuture.get();
-
-	while (true) {
-		string id;
-		cout << "Enter a remote ID to send an offer:" << endl;
-		cin >> id;
-		cin.ignore();
-		if (id.empty())
-			break;
-		if (id == localId)
-			continue;
-
-		cout << "Offering to " + id << endl;
-		auto pc = createPeerConnection(config, ws, id);
-
-		// We are the offerer, so create a data channel to initiate the process
-		const string label = "test";
-		cout << "Creating DataChannel with label \"" << label << "\"" << endl;
-		auto dc = pc->createDataChannel(label);
-
-		dc->onOpen([id, wdc = make_weak_ptr(dc)]() {
-			cout << "DataChannel from " << id << " open" << endl;
-			if (auto dc = wdc.lock())
-				dc->send("Hello from " + localId);
-		});
-
-		dc->onClosed([id]() { cout << "DataChannel from " << id << " closed" << endl; });
-
-		dc->onMessage([id, wdc = make_weak_ptr(dc)](variant<binary, string> data) {
-			if (holds_alternative<string>(data))
-				cout << "Message from " << id << " received: " << get<string>(data) << endl;
-			else {
-                cout << "1Binary message from " << id
-                     << " received, size=" << get<binary>(data).size() << endl;
-                handleFile(wdc, get<binary>(data));
-            }
-		});
-		dataChannelMap.emplace(id, dc);
-	}
-
-	cout << "Cleaning up..." << endl;
-
-	dataChannelMap.clear();
-	peerConnectionMap.clear();
 	return 0;
 
 } catch (const std::exception &e) {
 	std::cout << "Error: " << e.what() << std::endl;
-	dataChannelMap.clear();
-	peerConnectionMap.clear();
 	return -1;
 }
-
-// Create and setup a PeerConnection
-shared_ptr<PeerConnection> createPeerConnection(const Configuration &config,
-                                                weak_ptr<WebSocket> wws, string id) {
-	auto pc = make_shared<PeerConnection>(config);
-
-	pc->onStateChange([](PeerConnection::State state) { cout << "State: " << state << endl; });
-
-	pc->onGatheringStateChange(
-	    [](PeerConnection::GatheringState state) { cout << "Gathering State: " << state << endl; });
-
-	pc->onLocalDescription([wws, id](Description description) {
-		json message = {
-		    {"id", id}, {"type", description.typeString()}, {"description", string(description)}};
-
-		if (auto ws = wws.lock())
-			ws->send(message.dump());
-	});
-
-	pc->onLocalCandidate([wws, id](Candidate candidate) {
-		json message = {{"id", id},
-		                {"type", "candidate"},
-		                {"candidate", string(candidate)},
-		                {"mid", candidate.mid()}};
-
-		if (auto ws = wws.lock())
-			ws->send(message.dump());
-	});
-
-	pc->onDataChannel([id](shared_ptr<DataChannel> dc) {
-		cout << "DataChannel from " << id << " received with label \"" << dc->label() << "\""
-		     << endl;
-
-		dc->onClosed([id]() { cout << "DataChannel from " << id << " closed" << endl; });
-
-		dc->onMessage([id, wdc = make_weak_ptr(dc)](variant<binary, string> data) {
-			if (holds_alternative<string>(data))
-				cout << "Message from " << id << " received: " << get<string>(data) << endl;
-			else {
-                cout << "2Binary message from " << id
-                     << " received, size=" << get<binary>(data).size() << endl;
-                handleFile(wdc, get<binary>(data));
-            }
-		});
-
-		dc->send("Hello from " + localId);
-//		dc->send()
-		std::cout << "start send file " << std::endl;
-		std::string file{"/Users/joey/Downloads/OpenVPNEnablerForBigSur.zip"};
-//        std::vector<char> fileContent = readFile();
-		readFile(file, [&](const std::vector<char>& chars) {
-          std::vector<std::byte> bytes(chars.size());
-		  std::transform(chars.begin(), chars.end(), bytes.begin(), [&](const char& c) {
-			  return static_cast<std::byte>(c);
-		  });
-		  dc->send(bytes.data(), bytes.size());
-		});
-
-		dataChannelMap.emplace(id, dc);
-	});
-
-	peerConnectionMap.emplace(id, pc);
-	return pc;
-};
-
 
 // Helper function to generate a random ID
 string randomId(size_t length) {
