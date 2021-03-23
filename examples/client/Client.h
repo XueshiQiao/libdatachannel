@@ -33,7 +33,7 @@ protected:
     void handleWSMessage(std::variant<rtc::binary, std::string> data);
     void promptForInput();
     void handleFile(std::weak_ptr<rtc::DataChannel> dc, const std::vector<std::byte>& bytes);
-    std::shared_ptr<rtc::PeerConnection> createPeerConnection(const rtc::Configuration &config, std::weak_ptr<rtc::WebSocket> wws, string remoteID);
+    std::shared_ptr<rtc::PeerConnection> createPeerConnection(const rtc::Configuration &config, std::weak_ptr<rtc::WebSocket> wws, std::string remoteID);
 private:
     std::string myID;
     std::string remoteId;

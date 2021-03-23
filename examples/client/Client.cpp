@@ -126,7 +126,7 @@ void Client::promptForInput() {
 }
 
 // Create and setup a PeerConnection
-std::shared_ptr<rtc::PeerConnection> Client::createPeerConnection(const rtc::Configuration &config, std::weak_ptr<rtc::WebSocket> wws, string remoteID) {
+std::shared_ptr<rtc::PeerConnection> Client::createPeerConnection(const rtc::Configuration &config, std::weak_ptr<rtc::WebSocket> wws, std::string remoteID) {
     auto pc = make_shared<PeerConnection>(config);
 
     pc->onStateChange([](PeerConnection::State state) { cout << "State: " << state << endl; });
