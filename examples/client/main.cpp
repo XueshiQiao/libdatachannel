@@ -54,6 +54,17 @@ shared_ptr<PeerConnection> createPeerConnection(const Configuration &config,
                                                 weak_ptr<WebSocket> wws, string id);
 string randomId(size_t length);
 
+void handleFile(std::weak_ptr<rtc::DataChannel> dc, const std::vector<std::byte>& bytes) {
+    if (dc.lock()) {
+        std::string dest = "/Users/joey/Downloads/file.zip";
+        std::vector<char> chars(bytes.size());
+        std::transform(bytes.begin(), bytes.end(), chars.begin(), [](const std::byte byte){
+          return static_cast<char>(byte);
+        });
+        appendFile(dest, chars);
+	}
+}
+
 int main(int argc, char **argv) try {
 	Cmdline params(argc, argv);
 
@@ -187,13 +198,7 @@ int main(int argc, char **argv) try {
 			else {
                 cout << "1Binary message from " << id
                      << " received, size=" << get<binary>(data).size() << endl;
-                std::string dest = "/Users/joey/Downloads/file.zip";
-                std::vector<std::byte> bytes = get<binary>(data);
-				std::vector<char> chars(bytes.size());
-				std::transform(bytes.begin(), bytes.end(), chars.begin(), [](const std::byte byte){
-					return static_cast<char>(byte);
-				});
-				appendFile(dest, chars);
+                handleFile(wdc, get<binary>(data));
             }
 		});
 		dataChannelMap.emplace(id, dc);
@@ -249,9 +254,11 @@ shared_ptr<PeerConnection> createPeerConnection(const Configuration &config,
 		dc->onMessage([id, wdc = make_weak_ptr(dc)](variant<binary, string> data) {
 			if (holds_alternative<string>(data))
 				cout << "Message from " << id << " received: " << get<string>(data) << endl;
-			else
-				cout << "2Binary message from " << id
-				     << " received, size=" << get<binary>(data).size() << endl;
+			else {
+                cout << "2Binary message from " << id
+                     << " received, size=" << get<binary>(data).size() << endl;
+                handleFile(wdc, get<binary>(data));
+            }
 		});
 
 		dc->send("Hello from " + localId);
@@ -274,10 +281,11 @@ shared_ptr<PeerConnection> createPeerConnection(const Configuration &config,
 	return pc;
 };
 
+
 // Helper function to generate a random ID
 string randomId(size_t length) {
 	static const string characters(
-	    "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz");
+	    "0123456789"); //ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz");
 	string id(length, '0');
 	default_random_engine rng(random_device{}());
 	uniform_int_distribution<int> dist(0, int(characters.size() - 1));
