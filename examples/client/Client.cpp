@@ -108,6 +108,7 @@ void Client::promptForInput() {
 
     dataChannel->onOpen([&, remoteID, wdc = make_weak_ptr(dataChannel)]() {
       cout << "DataChannel from " << remoteID << " open" << endl;
+      dataChannelConnectedCompletion(dataChannel);
       if (auto dc = wdc.lock())
           dc->send("Hello from " + myID);
     });
@@ -172,17 +173,9 @@ std::shared_ptr<rtc::PeerConnection> Client::createPeerConnection(const rtc::Con
       });
 
       dc->send("Hello from " + myID);
+
+	  dataChannelConnectedCompletion(dataChannel);
 //		dc->send()
-//      std::cout << "start send file " << std::endl;
-//      std::string file{"/Users/joey/Downloads/OpenVPNEnablerForBigSur.zip"};
-////        std::vector<char> fileContent = readFile();
-//      readFile(file, [&](const std::vector<char>& chars) {
-//        std::vector<std::byte> bytes(chars.size());
-//        std::transform(chars.begin(), chars.end(), bytes.begin(), [&](const char& c) {
-//          return static_cast<std::byte>(c);
-//        });
-//        dc->send(bytes.data(), bytes.size());
-//      });
 
 //      dataChannelMap.emplace(remoteID, dc);
     });
@@ -193,7 +186,7 @@ std::shared_ptr<rtc::PeerConnection> Client::createPeerConnection(const rtc::Con
 
 void Client::handleFile(std::weak_ptr<rtc::DataChannel> dc, const std::vector<std::byte>& bytes) {
     if (dc.lock()) {
-        std::string dest = "/Users/joey/Downloads/file.zip";
+        std::string dest = "/Volumes/SSD/Downloads/received.dmg";
         std::vector<char> chars(bytes.size());
         std::transform(bytes.begin(), bytes.end(), chars.begin(), [](const std::byte byte){
           return static_cast<char>(byte);
@@ -202,5 +195,15 @@ void Client::handleFile(std::weak_ptr<rtc::DataChannel> dc, const std::vector<st
     }
 }
 
+void Client::sendFile(const std::string& filePath) {
+    std::cout << "start send file " << std::endl;
+    readFile(filePath, [&](const std::vector<char>& chars) {
+        std::vector<std::byte> bytes(chars.size());
 
+        std::transform(chars.begin(), chars.end(), bytes.begin(), [&](const char& c) {
+            return static_cast<std::byte>(c);
+        });
 
+        dataChannel->send(bytes.data(), bytes.size());
+    });
+}

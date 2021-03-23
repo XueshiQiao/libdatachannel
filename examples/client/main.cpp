@@ -84,6 +84,13 @@ int main(int argc, char **argv) try {
 	auto client = std::make_shared<Client>(localId, websocketURL, std::make_shared<rtc::Configuration>(config));
 	std::thread t([&]() {
         client->openConnect();
+		if (params.noStun()) { //use for temporary
+            client->onDataChannelConnected([&](std::shared_ptr<rtc::DataChannel> dataChannel){
+              std::string file{"/Volumes/SSD/Downloads/macupdater_latest.dmg"};
+              std::cout << "will send file " << file << std::endl;
+              client->sendFile(file);
+            });
+		}
 	});
 
 	t.join();

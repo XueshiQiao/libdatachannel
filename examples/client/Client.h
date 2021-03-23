@@ -28,12 +28,18 @@ class Client {
 public:
     Client(const std::string& myID, const std::string& websocketURL, std::shared_ptr<rtc::Configuration> configuration);
     void openConnect();
+	void onDataChannelConnected(std::function<void(std::shared_ptr<rtc::DataChannel> dataChannel)> completion) {
+		dataChannelConnectedCompletion = completion;
+	}
+
+	void sendFile(const std::string& filePath);
 protected:
 	void connectWebsocket(std::function<void(void)> completion);
     void handleWSMessage(std::variant<rtc::binary, std::string> data);
     void promptForInput();
     void handleFile(std::weak_ptr<rtc::DataChannel> dc, const std::vector<std::byte>& bytes);
     std::shared_ptr<rtc::PeerConnection> createPeerConnection(const rtc::Configuration &config, std::weak_ptr<rtc::WebSocket> wws, std::string remoteID);
+
 private:
     std::string myID;
     std::string remoteId;
@@ -42,6 +48,7 @@ private:
 	std::shared_ptr<rtc::WebSocket> websocket;
 	std::shared_ptr<rtc::PeerConnection> peerConnection;
 	std::shared_ptr<rtc::DataChannel> dataChannel;
+    std::function<void(std::shared_ptr<rtc::DataChannel> dataChannel)> dataChannelConnectedCompletion;
 };
 
 #endif // LIBDATACHANNEL_CLIENT_H
