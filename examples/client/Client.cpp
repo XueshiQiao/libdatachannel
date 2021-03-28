@@ -17,7 +17,13 @@ weak_ptr<T> make_weak_ptr(shared_ptr<T> ptr) {
 Client::Client(const std::string& myID,
                const std::string& websocketURL,
                std::shared_ptr<rtc::Configuration> configuration):
-               websocketURL(websocketURL), configuration(configuration), myID(myID), remoteId(""), websocket(std::make_shared<rtc::WebSocket>()), peerConnection(nullptr), dataChannel(nullptr) {
+    websocketURL(websocketURL),
+    configuration(configuration),
+    myID(myID),
+    remoteId(""),
+    websocket(std::make_shared<rtc::WebSocket>()),
+    peerConnection(nullptr),
+    dataChannel(nullptr) {
 }
 
 void Client::openConnect() {
@@ -127,7 +133,9 @@ void Client::promptForInput() {
 }
 
 // Create and setup a PeerConnection
-std::shared_ptr<rtc::PeerConnection> Client::createPeerConnection(const rtc::Configuration &config, std::weak_ptr<rtc::WebSocket> wws, std::string remoteID) {
+std::shared_ptr<rtc::PeerConnection> Client::createPeerConnection(const rtc::Configuration &config,
+                                                                  std::weak_ptr<rtc::WebSocket> wws,
+                                                                  std::string remoteID) {
     auto pc = make_shared<PeerConnection>(config);
 
     pc->onStateChange([](PeerConnection::State state) { cout << "State: " << state << endl; });
