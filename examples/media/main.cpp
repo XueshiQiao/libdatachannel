@@ -83,6 +83,14 @@ int main() {
 		std::cout << "Expect RTP video traffic on localhost:5000" << std::endl;
 		std::cout << "Please copy/paste the answer provided by the browser: " << std::endl;
 		std::string sdp;
+//		while (true) {
+//			std::string input;
+//            std::getline(std::cin, input);
+//            sdp+=input;
+//			if (input.empty()) {
+//				break;
+//			}
+//        }
 		std::getline(std::cin, sdp);
 		std::cout << "Got answer" << sdp << std::endl;
 		json j = json::parse(sdp);
