@@ -9,43 +9,87 @@
 <p>Please enter the offer provided to you by the application: </p>
 <textarea cols="50" rows="50"></textarea>
 <button>Submit</button>
+<button>Submit2</button>
 
 <script>
-    document.querySelector('button').addEventListener('click',  async () => {
+    document.querySelectorAll('button')[0].addEventListener('click',  async () => {
         let offer = JSON.parse(document.querySelector('textarea').value);
         rtc = new RTCPeerConnection({
             // Recommended for libdatachannel
             bundlePolicy: "max-bundle",
         });
+        window.rtc = rtc;
+
 
         rtc.onicegatheringstatechange = (state) => {
             if (rtc.iceGatheringState === 'complete') {
+
                 // We only want to provide an answer once all of our candidates have been added to the SDP.
                 let answer = rtc.localDescription;
                 let msg = JSON.stringify({"type": answer.type, sdp: answer.sdp});
-                document.querySelector('textarea').value = msg.substr(0, 1024);
-                document.querySelector('textarea').value += "\n";
-                document.querySelector('textarea').value = msg.substr(1024, msg.length - 1024);
+                var parts = [];
+                var splitedLength = 0;
+                while (msg.length > splitedLength) {
+                    parts.push(msg.substr(splitedLength, 500));
+                    splitedLength += 500;
+                }
+                let finalStr = parts.join("\n\n");
+                document.querySelector('textarea').value = finalStr;
+                // document.querySelector('textarea').value = msg.substr(0, 1024);
+                // document.querySelector('textarea').value += "\n";
+                // document.querySelector('textarea').value = msg.substr(1024, msg.length - 1024);
 
                 // document.querySelector('textarea').value = JSON.stringify({"type": answer.type, sdp: answer.sdp});
                 document.querySelector('p').value = 'Please paste the answer in the application.';
                 alert('Please paste the answer in the application.');
             }
         }
+
+        rtc.onconnectionstatechange = (event) => {
+            console.log('connection state: ', event.currentTarget.connectionState);
+            if (event.currentTarget.connectionState == 'connected') {
+                const sender = rtc.getSenders()[0];
+                var params = sender.getParameters();
+                console.log("sender params:", JSON.stringify(params));
+                params.encodings[0].maxBitrate = 2000 * 1000;
+                sender.setParameters(params);
+                console.log("sender new params:", JSON.stringify(params));
+            }
+        };
         await rtc.setRemoteDescription(offer);
 
-        let media = await navigator.mediaDevices.getUserMedia({
-            video: {
-                width: 1280,
-                height: 720
-            }
-        });
+        // let media = await navigator.mediaDevices.getUserMedia({
+        //     video: {
+        //         width: 1280,
+        //         height: 720
+        //     }
+        // });
+        console.log("press button 2");
+
+    });
+
+    document.querySelectorAll('button')[1].addEventListener('click',  async () => {
+
         // let media = await navigator.mediaDevices.getDisplayMedia({
         //     video: {
         //         width: 1280,
         //         height: 720
         //     }
         // });
+
+        // let devices = await navigator.mediaDevices.enumerateDevices()
+        //
+        // devices.forEach((device) => {
+        //     console.log("device: ", device.toJSON());
+        // })
+        //
+        let media = await navigator.mediaDevices.getUserMedia({
+            video: {
+                width: 1280,
+                height: 720
+            }
+        });
+
 
         media.getTracks().forEach(track => rtc.addTrack(track, media));
         let answer = await rtc.createAnswer();

@@ -33,6 +33,7 @@
 #include <arpa/inet.h>
 typedef int SOCKET;
 #endif
+#include <chrono>
 
 using nlohmann::json;
 
@@ -70,9 +71,21 @@ int main() {
 		auto session = std::make_shared<rtc::RtcpReceivingSession>();
 		track->setMediaHandler(session);
 
+		size_t size = 0;
+		auto begin = std::chrono::high_resolution_clock::now();
 		track->onMessage(
-		    [session, sock, addr](rtc::binary message) {
+		    [session, sock, addr, &size, &begin](rtc::binary message) {
 			    // This is an RTP packet
+			    auto now = std::chrono::high_resolution_clock::now();
+                auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now - begin);
+
+                size += message.size();
+                if (milliseconds.count() > 1000) {
+                    std::cout << "avg: " << (size * 1000.0 / milliseconds.count() / 1000 * 8) << " kbps"<< std::endl; //KBps
+                    begin = std::chrono::high_resolution_clock::now();
+				    size = 0;
+                }
+
 			    sendto(sock, reinterpret_cast<const char *>(message.data()), int(message.size()), 0,
 			           reinterpret_cast<const struct sockaddr *>(&addr), sizeof(addr));
 		    },
@@ -83,21 +96,26 @@ int main() {
 		std::cout << "Expect RTP video traffic on localhost:5000" << std::endl;
 		std::cout << "Please copy/paste the answer provided by the browser: " << std::endl;
 		std::string sdp;
-//		while (true) {
-//			std::string input;
-//            std::getline(std::cin, input);
-//            sdp+=input;
-//			if (input.empty()) {
-//				break;
-//			}
-//        }
-		std::getline(std::cin, sdp);
+		while (true) {
+			std::string input;
+            std::getline(std::cin, input);
+            sdp+=input;
+			if (input.empty()) {
+				break;
+			}
+        }
+//		std::getline(std::cin, sdp);
 		std::cout << "Got answer" << sdp << std::endl;
 		json j = json::parse(sdp);
 		rtc::Description answer(j["sdp"].get<std::string>(), j["type"].get<std::string>());
 		pc->setRemoteDescription(answer);
 		std::cout << "Press any key to exit." << std::endl;
-		std::cin >> sdp;
+		while (true) {
+            std::cin >> sdp;
+			if (sdp == "exit") {
+				break;
+			}
+        }
 
 	} catch (const std::exception &e) {
 		std::cerr << "Error: " << e.what() << std::endl;
